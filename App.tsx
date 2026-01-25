@@ -21,6 +21,7 @@ const App: React.FC = () => {
   const [services, setServices] = useState<BeautyService[]>([]);
   const [cart, setCart] = useState<BeautyService[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isGeneratingIA, setIsGeneratingIA] = useState(false);
   const [allSalons, setAllSalons] = useState<Salon[]>([]);
   const [globalStats, setGlobalStats] = useState({ totalAppointments: 0, platformProfit: 0, activeSalons: 0 });
   const [staffStats, setStaffStats] = useState({ totalDepositNet: 0, totalRemaining: 0, totalProjected: 0, platformFeesDeducted: 0, count: 0 });
@@ -28,7 +29,6 @@ const App: React.FC = () => {
   const [vendorSettings, setVendorSettings] = useState<VendorSettings | null>(null);
   const [appointment, setAppointment] = useState<Appointment | null>(null);
   const [paymentDone, setPaymentDone] = useState(false);
-  const [copiedLink, setCopiedLink] = useState(false);
 
   // Editing state
   const [editingService, setEditingService] = useState<Partial<BeautyService> | null>(null);
@@ -44,7 +44,6 @@ const App: React.FC = () => {
   const [loginError, setLoginError] = useState('');
   const [onboardingData, setOnboardingData] = useState({ name: '', slug: '', email: '', phone: '', password: '', confirmPassword: '' });
 
-  // Load Initial Data
   useEffect(() => {
     const init = async () => {
       const pathname = window.location.pathname;
@@ -55,8 +54,6 @@ const App: React.FC = () => {
           handleSalonSelect(salon);
         }
       }
-      
-      // Carrega salões aprovados para a landing
       const salons = await mockBackend.getAllSalons();
       setAllSalons(salons.filter(s => s.status === SalonStatus.APPROVED));
     };
@@ -64,12 +61,8 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (view === 'super-admin') {
-      refreshSuperAdminData();
-    }
-    if (view === 'staff' && authenticatedSalon) {
-      loadStaffData();
-    }
+    if (view === 'super-admin') refreshSuperAdminData();
+    if (view === 'staff' && authenticatedSalon) loadStaffData();
   }, [view, authenticatedSalon]);
 
   const loadStaffData = async () => {
@@ -86,6 +79,32 @@ const App: React.FC = () => {
     setVendorSettings(sett);
     setConfirmedAppointments(appts);
     setLoading(false);
+  };
+
+  const handleGenerateDescriptionIA = async () => {
+    if (!editingService?.name) {
+      alert("Por favor, dê um nome ao serviço primeiro.");
+      return;
+    }
+
+    setIsGeneratingIA(true);
+    try {
+      const response = await fetch('/.netlify/functions/gemini-assistant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ serviceName: editingService.name })
+      });
+
+      if (!response.ok) throw new Error("Erro ao consultar assistente de IA");
+      
+      const data = await response.json();
+      setEditingService(prev => ({ ...prev, description: data.text }));
+    } catch (error) {
+      console.error("Erro IA:", error);
+      alert("Não foi possível gerar a descrição agora. Tente novamente.");
+    } finally {
+      setIsGeneratingIA(false);
+    }
   };
 
   const refreshSuperAdminData = async () => {
@@ -151,25 +170,6 @@ const App: React.FC = () => {
     }
   };
 
-  const handleRegisterSalon = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (onboardingData.password !== onboardingData.confirmPassword) {
-      alert('As senhas digitadas não coincidem.');
-      return;
-    }
-    setLoading(true);
-    try {
-      const { confirmPassword, ...dataToSubmit } = onboardingData;
-      await mockBackend.registerSalon(dataToSubmit);
-      alert('Solicitação enviada! Aguarde a aprovação.');
-      setView('landing');
-    } catch (err: any) {
-      alert(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleLogout = () => {
     setAuthenticatedSalon(null);
     setIsAdminAuthenticated(false);
@@ -197,30 +197,6 @@ const App: React.FC = () => {
     }
   };
 
-  const handleToggleDay = (dayIndex: number) => {
-    if (!vendorSettings) return;
-    const newAvail = vendorSettings.availability.map(day => 
-      day.day === dayIndex ? { ...day, isOpen: !day.isOpen } : day
-    );
-    setVendorSettings({ ...vendorSettings, availability: newAvail });
-  };
-
-  const handleTimeChange = (dayIndex: number, field: 'startTime' | 'endTime', value: string) => {
-    if (!vendorSettings) return;
-    const newAvail = vendorSettings.availability.map(day => 
-      day.day === dayIndex ? { ...day, [field]: value } : day
-    );
-    setVendorSettings({ ...vendorSettings, availability: newAvail });
-  };
-
-  const saveSettings = async () => {
-    if (!vendorSettings || !authenticatedSalon) return;
-    setLoading(true);
-    await mockBackend.updateSettings(authenticatedSalon.id, vendorSettings);
-    setLoading(false);
-    alert('Agenda atualizada!');
-  };
-
   const handleBooking = async () => {
     if (!activeSalon) return;
     setLoading(true);
@@ -242,14 +218,6 @@ const App: React.FC = () => {
     await mockBackend.confirmPayment(appointment.id);
     setPaymentDone(true);
     setLoading(false);
-  };
-
-  const copyBookingLink = () => {
-    if (!authenticatedSalon) return;
-    const url = `${window.location.origin}/${authenticatedSalon.slug}`;
-    navigator.clipboard.writeText(url);
-    setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 2000);
   };
 
   const updateSalonStatus = async (id: string, status: SalonStatus) => {
@@ -311,7 +279,6 @@ const App: React.FC = () => {
     );
   }
 
-  // Admin Login
   if (view === 'admin-login') {
     return (
       <Layout>
@@ -332,7 +299,6 @@ const App: React.FC = () => {
     );
   }
 
-  // Super Admin View
   if (view === 'super-admin' && isAdminAuthenticated) {
     return (
       <Layout>
@@ -385,7 +351,6 @@ const App: React.FC = () => {
     );
   }
 
-  // Vendor Login
   if (view === 'vendor-login') {
     return (
       <Layout>
@@ -409,7 +374,6 @@ const App: React.FC = () => {
     );
   }
 
-  // Staff Dashboard
   if (view === 'staff' && authenticatedSalon) {
     return (
       <Layout activeSalon={authenticatedSalon}>
@@ -419,7 +383,6 @@ const App: React.FC = () => {
              <div className="flex gap-4">
                 <button onClick={() => setStaffTab('financial')} className={`text-[11px] font-black uppercase tracking-widest ${staffTab === 'financial' ? 'text-rose-500' : 'text-gray-400'}`}>Financeiro</button>
                 <button onClick={() => setStaffTab('services')} className={`text-[11px] font-black uppercase tracking-widest ${staffTab === 'services' ? 'text-rose-500' : 'text-gray-400'}`}>Catálogo</button>
-                <button onClick={() => setStaffTab('availability')} className={`text-[11px] font-black uppercase tracking-widest ${staffTab === 'availability' ? 'text-rose-500' : 'text-gray-400'}`}>Agenda</button>
                 <button onClick={handleLogout} className="text-[10px] font-black text-rose-500 border border-rose-100 px-4 py-2 rounded-xl">Sair</button>
              </div>
           </div>
@@ -428,7 +391,7 @@ const App: React.FC = () => {
             <div className="space-y-8">
               <div className="bg-gray-50/50 p-8 rounded-[3rem] flex justify-between items-center">
                 <h3 className="font-bold">Catálogo de Serviços</h3>
-                <button onClick={() => setEditingService({ name: '', price: 0, category: 'Geral', durationMinutes: 60, imageUrl: DEFAULT_SERVICE_IMAGE })} className="bg-gray-900 text-white px-8 py-4 rounded-2xl text-[10px] font-black uppercase shadow-xl">Novo Serviço</button>
+                <button onClick={() => setEditingService({ name: '', price: 0, category: 'Geral', durationMinutes: 60, imageUrl: DEFAULT_SERVICE_IMAGE, description: '' })} className="bg-gray-900 text-white px-8 py-4 rounded-2xl text-[10px] font-black uppercase shadow-xl">Novo Serviço</button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                 {services.map(s => (
@@ -458,7 +421,6 @@ const App: React.FC = () => {
                 {confirmedAppointments.map(apt => (
                   <div key={apt.id} className="p-8 border-b border-gray-50 flex justify-between items-center">
                     <div>
-                      {/* Fixed: Property 'user_name' does not exist on type 'Appointment'. Did you mean 'userName'? */}
                       <p className="font-bold">{apt.userName}</p>
                       <p className="text-xs text-gray-400">{new Date(apt.scheduledAt).toLocaleString()}</p>
                     </div>
@@ -470,23 +432,47 @@ const App: React.FC = () => {
           )}
         </div>
 
-        {/* Modal: Editor de Serviços */}
         {editingService && (
           <div className="fixed inset-0 bg-gray-900/90 backdrop-blur-md z-50 flex items-center justify-center p-6 animate-fadeIn">
-            <div className="bg-white w-full max-w-3xl rounded-[4rem] overflow-hidden shadow-2xl flex flex-col md:flex-row max-h-[90vh]">
+            <div className="bg-white w-full max-w-4xl rounded-[4rem] overflow-hidden shadow-2xl flex flex-col md:flex-row max-h-[90vh]">
                <div className="w-full md:w-1/2 p-12 space-y-8 overflow-y-auto">
                   <h3 className="text-3xl font-black serif">Editar Atendimento</h3>
                   <form onSubmit={handleSaveService} className="space-y-5">
-                    <input required className="w-full bg-gray-50 p-5 rounded-2xl outline-none" placeholder="Nome" value={editingService.name} onChange={e => setEditingService({...editingService, name: e.target.value})} />
-                    <input required type="number" className="w-full bg-gray-50 p-5 rounded-2xl outline-none" placeholder="Preço" value={editingService.price} onChange={e => setEditingService({...editingService, price: Number(e.target.value)})} />
-                    <button disabled={loading} className="w-full py-6 bg-rose-500 text-white rounded-[2rem] font-black uppercase tracking-widest shadow-2xl">{loading ? 'Salvando...' : 'Salvar'}</button>
+                    <div className="space-y-1">
+                       <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-4">Nome do Serviço</label>
+                       <input required className="w-full bg-gray-50 p-5 rounded-2xl outline-none" placeholder="Ex: Progressiva" value={editingService.name} onChange={e => setEditingService({...editingService, name: e.target.value})} />
+                    </div>
+                    
+                    <div className="space-y-1">
+                       <div className="flex justify-between items-center px-4">
+                          <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Descrição</label>
+                          <button type="button" onClick={handleGenerateDescriptionIA} disabled={isGeneratingIA} className="text-[9px] font-black text-rose-500 uppercase tracking-widest hover:text-rose-600 transition-colors flex items-center gap-1">
+                             {isGeneratingIA ? 'IA Escrevendo...' : <><ICONS.BeautySparkle /> Gerar com IA</>}
+                          </button>
+                       </div>
+                       <textarea className="w-full bg-gray-50 p-5 rounded-2xl outline-none min-h-[120px] text-sm resize-none" placeholder={isGeneratingIA ? "Aguarde, a IA está criando um texto incrível..." : "Descreva seu serviço..."} value={editingService.description} onChange={e => setEditingService({...editingService, description: e.target.value})} disabled={isGeneratingIA} />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                         <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-4">Preço (R$)</label>
+                         <input required type="number" className="w-full bg-gray-50 p-5 rounded-2xl outline-none" placeholder="0,00" value={editingService.price} onChange={e => setEditingService({...editingService, price: Number(e.target.value)})} />
+                      </div>
+                      <div className="space-y-1">
+                         <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-4">Minutos</label>
+                         <input required type="number" className="w-full bg-gray-50 p-5 rounded-2xl outline-none" placeholder="60" value={editingService.durationMinutes} onChange={e => setEditingService({...editingService, durationMinutes: Number(e.target.value)})} />
+                      </div>
+                    </div>
+                    
+                    <button disabled={loading || isGeneratingIA} className="w-full py-6 bg-rose-500 text-white rounded-[2rem] font-black uppercase tracking-widest shadow-2xl hover:bg-rose-600 transition-all">{loading ? 'Salvando...' : 'Salvar Alterações'}</button>
                     <button type="button" onClick={() => setEditingService(null)} className="w-full text-gray-400 text-[10px] font-black uppercase">Cancelar</button>
                   </form>
                </div>
                <div className="w-full md:w-1/2 bg-gray-50 p-12 border-l border-gray-100 overflow-y-auto">
-                  <div className="grid grid-cols-2 gap-4 h-[400px]">
-                     <div onClick={() => fileInputRef.current?.click()} className="cursor-pointer rounded-2xl border-4 border-dashed border-gray-200 bg-white flex flex-col items-center justify-center h-28 opacity-60 hover:opacity-100">
-                        <ICONS.Camera />
+                  <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.3em] mb-6">Galeria de Imagens</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                     <div onClick={() => fileInputRef.current?.click()} className="cursor-pointer rounded-2xl border-4 border-dashed border-gray-200 bg-white flex flex-col items-center justify-center h-28 opacity-60 hover:opacity-100 transition-all group">
+                        <div className="text-gray-300 group-hover:text-rose-500 transition-colors"><ICONS.Camera /></div>
                         <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleCustomImageUpload} />
                      </div>
                      {PREDEFINED_GALLERY.map(pic => (
@@ -503,7 +489,6 @@ const App: React.FC = () => {
     );
   }
 
-  // Customer View
   if (view === 'customer' && activeSalon) {
     return (
       <Layout activeSalon={activeSalon}>
@@ -517,6 +502,7 @@ const App: React.FC = () => {
                   <img src={s.imageUrl} className="w-full h-56 object-cover" />
                   <div className="p-10">
                     <h3 className="text-2xl font-bold serif">{s.name}</h3>
+                    <p className="text-xs text-gray-400 mt-2 line-clamp-2">{s.description}</p>
                     <p className="text-xl font-black mt-4">R$ {s.price.toLocaleString('pt-BR')}</p>
                   </div>
                 </div>
@@ -528,10 +514,10 @@ const App: React.FC = () => {
           <div className="max-w-xl mx-auto space-y-10 text-center">
             <h3 className="text-4xl font-black serif">Reserva</h3>
             <div className="space-y-6">
-               <input placeholder="Nome" className="w-full bg-gray-50 p-6 rounded-[2rem] outline-none" value={userName} onChange={e => setUserName(e.target.value)} />
-               <input placeholder="WhatsApp" className="w-full bg-gray-50 p-6 rounded-[2rem] outline-none" value={userPhone} onChange={e => setUserPhone(e.target.value)} />
+               <input placeholder="Seu Nome Completo" className="w-full bg-gray-50 p-6 rounded-[2rem] outline-none" value={userName} onChange={e => setUserName(e.target.value)} />
+               <input placeholder="Seu WhatsApp (00) 00000-0000" className="w-full bg-gray-50 p-6 rounded-[2rem] outline-none" value={userPhone} onChange={e => setUserPhone(e.target.value)} />
             </div>
-            <button onClick={handleBooking} disabled={!userName || !userPhone} className="w-full py-7 bg-gray-900 text-white rounded-[2.5rem] font-black uppercase text-xs shadow-2xl">Gerar Pix</button>
+            <button onClick={handleBooking} disabled={!userName || !userPhone} className="w-full py-7 bg-gray-900 text-white rounded-[2.5rem] font-black uppercase text-xs shadow-2xl hover:scale-[1.02] transition-all">Gerar Pix de Sinal</button>
           </div>
         )}
         {step === 2 && appointment && (
@@ -541,7 +527,7 @@ const App: React.FC = () => {
     );
   }
 
-  return <Layout><div>Carregando plataforma...</div></Layout>;
+  return <Layout><div className="flex items-center justify-center py-20 text-gray-400 font-bold uppercase tracking-widest animate-pulse">Carregando plataforma...</div></Layout>;
 };
 
 export default App;
