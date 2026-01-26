@@ -25,7 +25,12 @@ export default defineConfig(({ mode }) => {
       alias: {
         // 2. Garante que o @ aponte para a pasta de código
         '@': path.resolve(process.cwd(), './src'),
-      },
+      }      
+    },
+    build: {
+      copyPublicDir: true,
+  // Isso evita que o Vite tente processar CSS se ele não encontrar entradas
+      cssCodeSplit: false, 
     }
   };
 });
