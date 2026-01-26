@@ -6,7 +6,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
 
   return {
-    // 1. Garante que os caminhos sejam relativos ao index.html
+    // 1. Força caminhos relativos para evitar 404 em assets
     base: './', 
     
     server: {
@@ -15,7 +15,6 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [react()],
     
-    // 2. Simplifique o define para evitar erros de compilação
     define: {
       'process.env.VITE_SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL),
       'process.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY),
@@ -24,16 +23,9 @@ export default defineConfig(({ mode }) => {
     
     resolve: {
       alias: {
-        // 3. Corrija o alias para apontar para src (onde estão os componentes)
+        // 2. Garante que o @ aponte para a pasta de código
         '@': path.resolve(process.cwd(), './src'),
       },
-    },
-
-    // 4. Garante que o CSS e JS sejam gerados em pastas organizadas
-    build: {
-      outDir: 'dist',
-      assetsDir: 'assets',
-      sourcemap: false,
     }
   };
 });
