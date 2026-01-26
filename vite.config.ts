@@ -6,24 +6,27 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
 
   return {
-    base: '/', // Use barra para produção na Netlify
+    base: '/',
     plugins: [react()],
+    server: {
+      port: 3000
+    },
     define: {
-      'process.env': env // Injeta todas as variáveis de uma vez
+      'process.env': env
     },
     resolve: {
       alias: {
-        // Como não tem pasta src, o @ aponta para a raiz onde estão os componentes
+        // Importante: aponta para a raiz já que não tens 'src'
         '@': path.resolve(process.cwd(), '.'),
       }      
     },
     build: {
       outDir: 'dist',
+      assetsDir: 'assets',
+      emptyOutDir: true,
       rollupOptions: {
-        input: {
-          main: path.resolve(process.cwd(), 'index.html'),
-        },
-      },
+        input: 'index.html'
+      }
     }
   };
 });
