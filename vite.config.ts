@@ -6,31 +6,25 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
 
   return {
-    // 1. Força caminhos relativos para evitar 404 em assets
-    base: './', 
-    
+    base: './', // Essencial para evitar erros 404 na Netlify
     server: {
       port: 3000,
       host: '0.0.0.0',
     },
     plugins: [react()],
-    
     define: {
       'process.env.VITE_SUPABASE_URL': JSON.stringify(env.VITE_SUPABASE_URL),
       'process.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(env.VITE_SUPABASE_ANON_KEY),
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
     },
-    
     resolve: {
       alias: {
-        // 2. Garante que o @ aponte para a pasta de código
         '@': path.resolve(process.cwd(), './src'),
       }      
     },
     build: {
       copyPublicDir: true,
-  // Isso evita que o Vite tente processar CSS se ele não encontrar entradas
-      cssCodeSplit: false, 
+      cssCodeSplit: false, // Evita criar ficheiros CSS extra
     }
   };
 });
