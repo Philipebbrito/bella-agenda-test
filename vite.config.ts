@@ -1,5 +1,34 @@
-
 import path from 'path';
+import { defineConfig, loadEnv } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig(({ mode }) => {
+  // Carrega as variáveis do arquivo .env
+  const env = loadEnv(mode, process.cwd(), '');
+
+  return {
+    server: {
+      port: 3000,
+      host: '0.0.0.0',
+    },
+    plugins: [react()],
+    // Define variáveis globais (caso seu código antigo ainda use process.env)
+    define: {
+      'process.env': env, 
+    },
+    resolve: {
+      alias: {
+        // Garante que @ aponte para a pasta de código fonte
+        '@': path.resolve(process.cwd(), './src'),
+      }
+    },
+    // Otimização para evitar erros de dependências no carregamento
+    optimizeDeps: {
+      include: ['react', 'react-dom'],
+    }
+  };
+});
+/*import path from 'path';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -25,4 +54,4 @@ export default defineConfig(({ mode }) => {
         }
       }
     };
-});
+});*/
